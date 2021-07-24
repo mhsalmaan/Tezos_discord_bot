@@ -1,43 +1,45 @@
-from hashlib import new
-from typing import List
 import discord
+from discord.ext import commands
+from discord.ext.commands import ChannelNotFound, MissingRequiredArgument
 import os
-from discord import user
-from discord.user import User
-import mnemonic
-from pytezos import pytezos
 
-client = discord.Client()
+from discord.ext.commands.errors import CommandNotFound
 
-token = os.getenv('TOKEN')
+client = commands.Bot(command_prefix='.')
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    await client.change_presence(status=discord.Status.idle, activity=discord.Game('Hello there!'))
+    print(f"\n# Logged in as {client.user}", end="\n\n")
+
+@client.command()
+async def load(ctx, extension):
+    client.load_extension(f'cogs.{extension}')
+
+@client.command()
+async def unload(ctx, extension):
+    client.unload_extension(f'cogs.{extension}')
+
+@client.command()
+async def reload(ctx, extension):
+    client.unload_extension(f'cogs.{extension}')
+    client.load_extension(f'cogs.{extension}')
+
+
+for filename in os.listdir('./cogs'):
+    if filename.endswith('.py'):
+        client.load_extension(f'cogs.{filename[:-3]}')
+
 
 @client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
+async def on_command_error(ctx, error):
+    error_to_skip = [CommandNotFound, MissingRequiredArgument]
 
-    msg = message.content
+    for error_type in error_to_skip:
+        if isinstance(error, error_type):
+            return
 
-    if msg.startswith('$create'):
-        new_account = pytezos.key.generate()
-        secretKey = new_account.secret_key()
-        publicKey = new_account.public_key()
-        publicHash = new_account.public_key_hash()
-        keyList = {"SecretKey" : secretKey, "PublicKey" : publicKey, "PublicHash" : publicHash}
-        await message.channel.send(keyList)
+    raise error
 
-    if msg.startswith('$import'):
-        mnemonics = msg[8:]
-        account = pytezos.key.from_mnemonic(mnemonic= mnemonics)
-        secretKey = account.secret_key()
-        publicKey = account.public_key()
-        publicHash = account.public_key_hash()
-        keyList = {"SecretKey" : secretKey, "PublicKey" : publicKey, "PublicHash" : publicHash}
-        await message.channel.send(mnemonics)
-        await message.channel.send(keyList)
 
-client.run(token)
+client.run(os.getenv('DISCORD_TOKEN'))
